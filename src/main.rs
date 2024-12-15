@@ -21,7 +21,9 @@ enum Commands {
         /// Y coordinate
         y: f32
     },
+    /// Turn the stepper motors on
     MotorsOn,
+    /// Turn the stepper motors off
     MotorsOff,
 }
 
