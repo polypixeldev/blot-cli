@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+clap = { version = "4.5.23", features = ["derive"] }
+cobs2 = "0.1.4"
+serial = "0.4.0"
+
+[[bin]]
+name = "blot"
+path = "src/main.rs"
