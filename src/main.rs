@@ -21,6 +21,8 @@ enum Commands {
         /// Y coordinate
         y: f32
     },
+    MotorsOn,
+    MotorsOff,
 }
 
 fn main() {
@@ -33,6 +35,28 @@ fn main() {
         payload.extend_from_slice(x.to_ne_bytes().as_slice());
         payload.extend_from_slice(y.to_ne_bytes().as_slice());
         let send_result = comms::send(cli.port, "go", payload, None);
+
+        if send_result.is_err() {
+          panic!("Failed to send message to Blot: {}", send_result.unwrap_err());
+        }
+
+        println!("Message sent to Blot");
+      }
+      Some(Commands::MotorsOn) => {
+        println!("Turning motors on");
+
+        let send_result = comms::send(cli.port, "motorsOn", vec!(), None);
+
+        if send_result.is_err() {
+          panic!("Failed to send message to Blot: {}", send_result.unwrap_err());
+        }
+
+        println!("Message sent to Blot");
+      }
+      Some(Commands::MotorsOff) => {
+        println!("Turning motors off");
+
+        let send_result = comms::send(cli.port, "motorsOff", vec!(), None);
 
         if send_result.is_err() {
           panic!("Failed to send message to Blot: {}", send_result.unwrap_err());
