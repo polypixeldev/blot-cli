@@ -1,15 +1,22 @@
 mod comms;
+
 use clap::{Parser, Subcommand};
+use comms::{BlotPacket, PacketState};
+use ringbuffer::{AllocRingBuffer, RingBuffer};
+use std::{sync::Arc, time::Duration};
+use tokio;
+use tokio::sync::Mutex;
+use uuid::Uuid;
 
 /// CLI for the Hack Club Blot
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-  #[command(subcommand)]
-  command: Option<Commands>,
+    #[command(subcommand)]
+    command: Option<Commands>,
 
-  #[arg(short, long)]
-  port: String,
+    #[arg(short, long)]
+    port: String,
 }
 
 #[derive(Subcommand)]
@@ -19,7 +26,7 @@ enum Commands {
         /// X coordinate
         x: f32,
         /// Y coordinate
-        y: f32
+        y: f32,
     },
     /// Turn the stepper motors on
     MotorsOn,
@@ -27,45 +34,86 @@ enum Commands {
     MotorsOff,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let cli = Cli::parse();
 
+    let packet_queue = Arc::new(Mutex::new(AllocRingBuffer::new(10)));
+    tokio::spawn(comms::initialize(cli.port, packet_queue.clone()));
+
+    let mut packets = packet_queue.lock().await;
+
     match &cli.command {
-      Some(Commands::Go { x, y }) => {
-        println!("Going to: ({}, {})", x, y);
-        let mut payload: Vec<u8> = vec!();
-        payload.extend_from_slice(x.to_ne_bytes().as_slice());
-        payload.extend_from_slice(y.to_ne_bytes().as_slice());
-        let send_result = comms::send(cli.port, "go", payload, None);
+        Some(Commands::Go { x, y }) => {
+            println!("Going to: ({}, {})", x, y);
+            let mut payload: Vec<u8> = vec![];
+            payload.extend_from_slice(x.to_ne_bytes().as_slice());
+            payload.extend_from_slice(y.to_ne_bytes().as_slice());
 
-        if send_result.is_err() {
-          panic!("Failed to send message to Blot: {}", send_result.unwrap_err());
+            let id = Uuid::new_v4();
+            packets.push(BlotPacket {
+                id,
+                msg: "go".to_string(),
+                payload: vec![],
+                index: None,
+                state: comms::PacketState::Queued,
+            });
+
+            // Drop mutex so comms thread can gain a lock
+            std::mem::drop(packets);
+
+            wait_for_ack(packet_queue, id).await;
+        }
+        Some(Commands::MotorsOn) => {
+            println!("Turning motors on");
+
+            let id = Uuid::new_v4();
+            packets.push(BlotPacket {
+                id,
+                msg: "motorsOn".to_string(),
+                payload: vec![],
+                index: None,
+                state: comms::PacketState::Queued,
+            });
+
+            // Drop mutex so comms thread can gain a lock
+            std::mem::drop(packets);
+
+            wait_for_ack(packet_queue, id).await;
+        }
+        Some(Commands::MotorsOff) => {
+            println!("Turning motors off");
+
+            let id = Uuid::new_v4();
+            packets.push(BlotPacket {
+                id,
+                msg: "motorsOff".to_string(),
+                payload: vec![],
+                index: None,
+                state: comms::PacketState::Queued,
+            });
+
+            // Drop mutex so comms thread can gain a lock
+            std::mem::drop(packets);
+
+            wait_for_ack(packet_queue, id).await;
+        }
+        None => {}
+    }
+}
+
+async fn wait_for_ack(packet_queue: Arc<Mutex<AllocRingBuffer<BlotPacket>>>, id: Uuid) {
+    loop {
+        let packets = packet_queue.lock().await;
+
+        let packet_result = packets.iter().find(|p| p.id == id);
+
+        if let Some(packet) = packet_result {
+            if packet.state == PacketState::Resolved {
+                break;
+            }
         }
 
-        println!("Message sent to Blot");
-      }
-      Some(Commands::MotorsOn) => {
-        println!("Turning motors on");
-
-        let send_result = comms::send(cli.port, "motorsOn", vec!(), None);
-
-        if send_result.is_err() {
-          panic!("Failed to send message to Blot: {}", send_result.unwrap_err());
-        }
-
-        println!("Message sent to Blot");
-      }
-      Some(Commands::MotorsOff) => {
-        println!("Turning motors off");
-
-        let send_result = comms::send(cli.port, "motorsOff", vec!(), None);
-
-        if send_result.is_err() {
-          panic!("Failed to send message to Blot: {}", send_result.unwrap_err());
-        }
-
-        println!("Message sent to Blot");
-      }
-      None => {}
-  }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
