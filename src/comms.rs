@@ -3,6 +3,7 @@ use std::str;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use tokio::task::yield_now;
 
 use cobs2::cobs;
 use ringbuffer::{AllocRingBuffer, RingBuffer};
@@ -42,6 +43,7 @@ pub async fn initialize(port: String, packet_queue: Arc<Mutex<AllocRingBuffer<Bl
                         .expect("Received an ack for a nonexistent message");
 
                     sent_packet.state = PacketState::Resolved;
+                    println!("resolved packet {:?}", sent_packet);
                 }
                 _ => {
                     panic!("Unexpected packet type: {}", packet.msg)
@@ -65,6 +67,8 @@ pub async fn initialize(port: String, packet_queue: Arc<Mutex<AllocRingBuffer<Bl
                 }
             }
         }
+
+        yield_now().await;
     }
 }
 
@@ -82,20 +86,22 @@ impl BlotComms {
     }
 
     fn read(&mut self) -> Option<BlotPacket> {
-        println!("reading");
         let mut response: Vec<u8> = vec![];
 
         // 0x0a (LF) terminates each message from the Blot
-        while response.last() != Some(&0x0a) {
-            let mut data: Vec<u8> = vec![];
+        while response.iter().find(|&&b| b == 0x0a).is_none() {
+            // max message length: 1 + 255 + 1 + 255 + 1
+            let mut data: Vec<u8> = vec![0; 513];
             let result = self.port.read(data.as_mut_slice());
 
             if result.is_err() {
-                println!("read err {}", result.unwrap_err());
                 return None;
             }
 
-            response.extend_from_slice(&data);
+            let bytes_read = result.unwrap();
+            if bytes_read != 0 {
+                response.extend(data[0..bytes_read].iter());
+            }
         }
 
         let unpacked = Self::unpack(&response);
@@ -110,12 +116,10 @@ impl BlotComms {
     async fn send(&mut self, packet: &BlotPacket) -> Result<u8, Box<dyn std::error::Error>> {
         let packed = Self::pack(&packet)?;
 
-        let encoded = cobs::encode_vector(&packed)?;
+        let mut encoded = cobs::encode_vector(&packed)?;
+        encoded.push(0);
 
-        let written = self.port.write(&encoded)?;
-
-        println!("wrote {} bytes", written);
-        println!("{:?}", Self::unpack(&packed));
+        self.port.write(&encoded)?;
 
         Ok(packet.index.unwrap())
     }

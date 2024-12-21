@@ -39,7 +39,7 @@ async fn main() {
     let cli = Cli::parse();
 
     let packet_queue = Arc::new(Mutex::new(AllocRingBuffer::new(10)));
-    tokio::spawn(comms::initialize(cli.port, packet_queue.clone()));
+    let comms_thread = tokio::spawn(comms::initialize(cli.port, packet_queue.clone()));
 
     let mut packets = packet_queue.lock().await;
 
@@ -95,11 +95,12 @@ async fn main() {
 
             // Drop mutex so comms thread can gain a lock
             std::mem::drop(packets);
-
             wait_for_ack(packet_queue, id).await;
         }
         None => {}
     }
+
+    comms_thread.abort();
 }
 
 async fn wait_for_ack(packet_queue: Arc<Mutex<AllocRingBuffer<BlotPacket>>>, id: Uuid) {
