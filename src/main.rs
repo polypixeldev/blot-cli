@@ -21,7 +21,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Move the tool head to the specified coordinates
+    /// Move the pen to the specified coordinates
     Go {
         /// X coordinate
         x: f32,
@@ -33,19 +33,23 @@ enum Commands {
         #[command(subcommand)]
         cmd: MotorsSubcommands,
     },
-
     /// Manage the Blot's origin
     Origin {
         #[command(subcommand)]
         cmd: OriginSubcommands,
     },
+    /// Manage the Blot's pen
+    Pen {
+        #[command(subcommand)]
+        cmd: PenSubcommands,
+    },
 }
 
 #[derive(Subcommand)]
 enum OriginSubcommands {
-    /// Moves the tool head towards the stored origin
+    /// Moves the pen towards the stored origin
     Move,
-    /// Stores the current tool head location as the Blot's origin
+    /// Stores the current pen location as the Blot's origin
     Set,
 }
 
@@ -55,6 +59,14 @@ enum MotorsSubcommands {
     On,
     /// Turn the stepper motors off
     Off,
+}
+
+#[derive(Subcommand)]
+enum PenSubcommands {
+    /// Move the pen up
+    Up,
+    /// Move the pen down
+    Down,
 }
 
 #[tokio::main]
@@ -150,6 +162,42 @@ async fn main() {
                         id,
                         msg: "setOrigin".to_string(),
                         payload: vec![],
+                        index: None,
+                        state: comms::PacketState::Queued,
+                    });
+
+                    // Drop mutex so comms thread can gain a lock
+                    std::mem::drop(packets);
+                    wait_for_ack(packet_queue, id).await;
+                }
+            }
+        }
+        Commands::Pen { cmd } => {
+            match cmd {
+                PenSubcommands::Up => {
+                    println!("Moving pen up");
+
+                    let id = Uuid::new_v4();
+                    packets.push(BlotPacket {
+                        id,
+                        msg: "servo".to_string(),
+                        payload: 1000_u32.to_le_bytes().to_vec(),
+                        index: None,
+                        state: comms::PacketState::Queued,
+                    });
+
+                    // Drop mutex so comms thread can gain a lock
+                    std::mem::drop(packets);
+                    wait_for_ack(packet_queue, id).await;
+                }
+                PenSubcommands::Down => {
+                    println!("Moving pen down");
+
+                    let id = Uuid::new_v4();
+                    packets.push(BlotPacket {
+                        id,
+                        msg: "servo".to_string(),
+                        payload: 1700_u32.to_le_bytes().to_vec(),
                         index: None,
                         state: comms::PacketState::Queued,
                     });
