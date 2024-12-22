@@ -54,7 +54,7 @@ async fn main() {
             packets.push(BlotPacket {
                 id,
                 msg: "go".to_string(),
-                payload: vec![],
+                payload: [x.to_le_bytes(), y.to_le_bytes()].concat(),
                 index: None,
                 state: comms::PacketState::Queued,
             });
