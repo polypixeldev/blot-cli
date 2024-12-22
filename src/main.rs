@@ -32,6 +32,10 @@ enum Commands {
     MotorsOn,
     /// Turn the stepper motors off
     MotorsOff,
+    /// Moves the tool head towards the stored origin
+    Origin,
+    /// Stores the current tool head location as the Blot's origin
+    SetOrigin,
 }
 
 #[tokio::main]
@@ -88,6 +92,38 @@ async fn main() {
             packets.push(BlotPacket {
                 id,
                 msg: "motorsOff".to_string(),
+                payload: vec![],
+                index: None,
+                state: comms::PacketState::Queued,
+            });
+
+            // Drop mutex so comms thread can gain a lock
+            std::mem::drop(packets);
+            wait_for_ack(packet_queue, id).await;
+        }
+        Some(Commands::Origin) => {
+            println!("Moving towards origin");
+
+            let id = Uuid::new_v4();
+            packets.push(BlotPacket {
+                id,
+                msg: "moveTowardsOrigin".to_string(),
+                payload: vec![],
+                index: None,
+                state: comms::PacketState::Queued,
+            });
+
+            // Drop mutex so comms thread can gain a lock
+            std::mem::drop(packets);
+            wait_for_ack(packet_queue, id).await;
+        }
+        Some(Commands::SetOrigin) => {
+            println!("Setting origin");
+
+            let id = Uuid::new_v4();
+            packets.push(BlotPacket {
+                id,
+                msg: "setOrigin".to_string(),
                 payload: vec![],
                 index: None,
                 state: comms::PacketState::Queued,
