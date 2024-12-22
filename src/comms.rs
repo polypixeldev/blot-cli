@@ -43,7 +43,6 @@ pub async fn initialize(port: String, packet_queue: Arc<Mutex<AllocRingBuffer<Bl
                         .expect("Received an ack for a nonexistent message");
 
                     sent_packet.state = PacketState::Resolved;
-                    println!("resolved packet {:?}", sent_packet);
                 }
                 _ => {
                     panic!("Unexpected packet type: {}", packet.msg)
