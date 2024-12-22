@@ -13,7 +13,7 @@ use uuid::Uuid;
 #[command(version, about, long_about = None)]
 struct Cli {
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
 
     #[arg(short, long)]
     port: String,
@@ -28,14 +28,33 @@ enum Commands {
         /// Y coordinate
         y: f32,
     },
-    /// Turn the stepper motors on
-    MotorsOn,
-    /// Turn the stepper motors off
-    MotorsOff,
+    /// Manage the Blot's stepper motors
+    Motors {
+        #[command(subcommand)]
+        cmd: MotorsSubcommands,
+    },
+
+    /// Manage the Blot's origin
+    Origin {
+        #[command(subcommand)]
+        cmd: OriginSubcommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum OriginSubcommands {
     /// Moves the tool head towards the stored origin
-    Origin,
+    Move,
     /// Stores the current tool head location as the Blot's origin
-    SetOrigin,
+    Set,
+}
+
+#[derive(Subcommand)]
+enum MotorsSubcommands {
+    /// Turn the stepper motors on
+    On,
+    /// Turn the stepper motors off
+    Off,
 }
 
 #[tokio::main]
@@ -48,7 +67,7 @@ async fn main() {
     let mut packets = packet_queue.lock().await;
 
     match &cli.command {
-        Some(Commands::Go { x, y }) => {
+        Commands::Go { x, y } => {
             println!("Going to: ({}, {})", x, y);
             let mut payload: Vec<u8> = vec![];
             payload.extend_from_slice(x.to_ne_bytes().as_slice());
@@ -68,72 +87,79 @@ async fn main() {
 
             wait_for_ack(packet_queue, id).await;
         }
-        Some(Commands::MotorsOn) => {
-            println!("Turning motors on");
+        Commands::Motors { cmd } => {
+            match cmd {
+                MotorsSubcommands::On => {
+                    println!("Turning stepper motors on");
 
-            let id = Uuid::new_v4();
-            packets.push(BlotPacket {
-                id,
-                msg: "motorsOn".to_string(),
-                payload: vec![],
-                index: None,
-                state: comms::PacketState::Queued,
-            });
+                    let id = Uuid::new_v4();
+                    packets.push(BlotPacket {
+                        id,
+                        msg: "motorsOn".to_string(),
+                        payload: vec![],
+                        index: None,
+                        state: comms::PacketState::Queued,
+                    });
 
-            // Drop mutex so comms thread can gain a lock
-            std::mem::drop(packets);
+                    // Drop mutex so comms thread can gain a lock
+                    std::mem::drop(packets);
 
-            wait_for_ack(packet_queue, id).await;
+                    wait_for_ack(packet_queue, id).await;
+                }
+                MotorsSubcommands::Off => {
+                    println!("Turning stepper motors off");
+
+                    let id = Uuid::new_v4();
+                    packets.push(BlotPacket {
+                        id,
+                        msg: "motorsOff".to_string(),
+                        payload: vec![],
+                        index: None,
+                        state: comms::PacketState::Queued,
+                    });
+
+                    // Drop mutex so comms thread can gain a lock
+                    std::mem::drop(packets);
+                    wait_for_ack(packet_queue, id).await;
+                }
+            }
         }
-        Some(Commands::MotorsOff) => {
-            println!("Turning motors off");
+        Commands::Origin { cmd } => {
+            match cmd {
+                OriginSubcommands::Move => {
+                    println!("Moving towards origin");
 
-            let id = Uuid::new_v4();
-            packets.push(BlotPacket {
-                id,
-                msg: "motorsOff".to_string(),
-                payload: vec![],
-                index: None,
-                state: comms::PacketState::Queued,
-            });
+                    let id = Uuid::new_v4();
+                    packets.push(BlotPacket {
+                        id,
+                        msg: "moveTowardsOrigin".to_string(),
+                        payload: vec![],
+                        index: None,
+                        state: comms::PacketState::Queued,
+                    });
 
-            // Drop mutex so comms thread can gain a lock
-            std::mem::drop(packets);
-            wait_for_ack(packet_queue, id).await;
+                    // Drop mutex so comms thread can gain a lock
+                    std::mem::drop(packets);
+                    wait_for_ack(packet_queue, id).await;
+                }
+                OriginSubcommands::Set => {
+                    println!("Setting origin");
+
+                    let id = Uuid::new_v4();
+                    packets.push(BlotPacket {
+                        id,
+                        msg: "setOrigin".to_string(),
+                        payload: vec![],
+                        index: None,
+                        state: comms::PacketState::Queued,
+                    });
+
+                    // Drop mutex so comms thread can gain a lock
+                    std::mem::drop(packets);
+                    wait_for_ack(packet_queue, id).await;
+                }
+            }
         }
-        Some(Commands::Origin) => {
-            println!("Moving towards origin");
-
-            let id = Uuid::new_v4();
-            packets.push(BlotPacket {
-                id,
-                msg: "moveTowardsOrigin".to_string(),
-                payload: vec![],
-                index: None,
-                state: comms::PacketState::Queued,
-            });
-
-            // Drop mutex so comms thread can gain a lock
-            std::mem::drop(packets);
-            wait_for_ack(packet_queue, id).await;
-        }
-        Some(Commands::SetOrigin) => {
-            println!("Setting origin");
-
-            let id = Uuid::new_v4();
-            packets.push(BlotPacket {
-                id,
-                msg: "setOrigin".to_string(),
-                payload: vec![],
-                index: None,
-                state: comms::PacketState::Queued,
-            });
-
-            // Drop mutex so comms thread can gain a lock
-            std::mem::drop(packets);
-            wait_for_ack(packet_queue, id).await;
-        }
-        None => {}
     }
 
     comms_thread.abort();
