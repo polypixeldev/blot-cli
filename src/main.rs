@@ -458,7 +458,7 @@ async fn main() {
                                         InteractiveEditStatus::GoCoordinates => {
                                             let split = edit_text.split(",").collect::<Vec<_>>();
                                             let x_parse = split[0].trim().parse::<f32>();
-                                            let y_parse = split[0].trim().parse::<f32>();
+                                            let y_parse = split[1].trim().parse::<f32>();
 
                                             if x_parse.is_err() | y_parse.is_err() {
                                                 continue;
