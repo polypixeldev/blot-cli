@@ -39,10 +39,12 @@ pub async fn initialize(port: String, packet_queue: Arc<Mutex<AllocRingBuffer<Bl
                 "ack" => {
                     let sent_packet = packets
                         .iter_mut()
-                        .find(|p| p.index == packet.index && p.state == PacketState::Sent)
-                        .expect("Received an ack for a nonexistent message");
+                        .find(|p| p.index == packet.index && p.state == PacketState::Sent);
 
-                    sent_packet.state = PacketState::Resolved;
+                    match sent_packet {
+                        Some(p) => p.state = PacketState::Resolved,
+                        None => println!("Received an ack for a nonexistent packet"),
+                    }
                 }
                 _ => {
                     panic!("Unexpected packet msg: {}", packet.msg)

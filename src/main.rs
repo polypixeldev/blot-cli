@@ -12,7 +12,9 @@ use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::{
     future::Future,
     io::{self, Stdout},
+    panic,
     pin::Pin,
+    process,
     sync::{mpsc, Arc},
     task::{Context, Poll},
     thread,
@@ -143,6 +145,13 @@ async fn main() {
     let packet_queue = Arc::new(Mutex::new(AllocRingBuffer::new(10)));
     let comms_thread = tokio::spawn(comms::initialize(cli.port, packet_queue.clone()));
 
+    // Exit main thread if comms thread panics
+    let orig_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        orig_hook(panic_info);
+        process::exit(1);
+    }));
+
     match &cli.command {
         Commands::Go { x, y } => {
             println!("Going to: ({}, {})", x, y);
@@ -193,7 +202,15 @@ async fn main() {
             }
         },
         Commands::Interactive => {
-            enable_raw_mode().expect("failed to enable raw mode");
+            let orig_hook = panic::take_hook();
+            panic::set_hook(Box::new(move |panic_info| {
+                let stdout = io::stdout();
+                let backend = CrosstermBackend::new(stdout);
+                let terminal = Terminal::new(backend).expect("Failed to initialize tui backend");
+                restore_terminal(terminal);
+
+                orig_hook(panic_info);
+            }));
 
             let (tx, rx) = mpsc::channel();
             let tick_rate = Duration::from_millis(200);
@@ -222,6 +239,7 @@ async fn main() {
             let backend = CrosstermBackend::new(stdout);
             let mut terminal = Terminal::new(backend).expect("Failed to initialize tui backend");
             terminal.clear().expect("Failed to clear terminal");
+            enable_raw_mode().expect("failed to enable raw mode");
 
             let menu_titles = vec![
                 "Go",
