@@ -3,7 +3,7 @@ mod comms;
 use clap::{Parser, Subcommand};
 use comms::{BlotPacket, PacketState};
 use crossterm::{
-    event::{self, DisableMouseCapture, Event as CEvent, KeyCode},
+    event::{self, DisableMouseCapture, Event as CEvent, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
@@ -11,7 +11,7 @@ use futures::{task::noop_waker_ref, FutureExt};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
 use std::{
     future::Future,
-    io,
+    io::{self, Stdout},
     pin::Pin,
     sync::{mpsc, Arc},
     task::{Context, Poll},
@@ -416,6 +416,12 @@ async fn main() {
                     match rx.recv() {
                         Ok(Event::Input(event)) => {
                             match event.code {
+                                KeyCode::Char('c') => {
+                                    if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                        restore_terminal(terminal);
+                                        break;
+                                    }
+                                }
                                 KeyCode::Char(c) => {
                                     let num_parse = c.to_string().parse::<f32>();
 
@@ -498,22 +504,17 @@ async fn main() {
                     match rx.recv() {
                         Ok(Event::Input(event)) => match event.code {
                             KeyCode::Char('q') => {
-                                // restore terminal
-                                disable_raw_mode().expect("Failed to restore terminal");
-                                execute!(
-                                    terminal.backend_mut(),
-                                    LeaveAlternateScreen,
-                                    DisableMouseCapture
-                                )
-                                .expect("Failed to restore terminal");
-                                terminal.clear().expect("Failed to clear terminal");
-                                terminal.show_cursor().expect("Failed to restore terminal");
+                                restore_terminal(terminal);
                                 break;
                             }
                             KeyCode::Char('g') => {
                                 interactive_edit_status = InteractiveEditStatus::GoCoordinates;
                             }
                             KeyCode::Char('c') => {
+                                if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                    restore_terminal(terminal);
+                                    break;
+                                }
                                 interactive_edit_status = InteractiveEditStatus::StepSize;
                             }
                             KeyCode::Char('f') | KeyCode::Char('w') => {
@@ -623,6 +624,18 @@ async fn main() {
     }
 
     comms_thread.abort();
+}
+
+fn restore_terminal(mut terminal: Terminal<CrosstermBackend<Stdout>>) {
+    disable_raw_mode().expect("Failed to restore terminal");
+    execute!(
+        terminal.backend_mut(),
+        LeaveAlternateScreen,
+        DisableMouseCapture
+    )
+    .expect("Failed to restore terminal");
+    terminal.clear().expect("Failed to clear terminal");
+    terminal.show_cursor().expect("Failed to restore terminal");
 }
 
 async fn send_command(
