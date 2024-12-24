@@ -427,7 +427,7 @@ async fn main() {
                                     edit_text = new_edit_text;
                                 }
                                 KeyCode::Backspace | KeyCode::Delete => {
-                                    edit_text = edit_text[0..edit_text.len()].to_string();
+                                    edit_text = edit_text[0..(edit_text.len() - 1)].to_string();
                                 }
                                 KeyCode::Enter => {
                                     match &interactive_edit_status {
@@ -440,8 +440,21 @@ async fn main() {
                                                 continue;
                                             }
 
-                                            let new_x = x_parse.unwrap();
-                                            let new_y = y_parse.unwrap();
+                                            let mut new_x = x_parse.unwrap();
+                                            let mut new_y = y_parse.unwrap();
+
+                                            if new_y < 0.0 {
+                                                new_y = 0.0;
+                                            }
+                                            if new_y > 125.0 {
+                                                new_y = 125.0;
+                                            }
+                                            if new_x < 0.0 {
+                                                new_x = 0.0;
+                                            }
+                                            if new_x > 125.0 {
+                                                new_x = 125.0;
+                                            }
 
                                             let command_future = send_command(
                                                 packet_queue.clone(),
