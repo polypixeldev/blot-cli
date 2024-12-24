@@ -39,17 +39,22 @@ pub async fn initialize(port: String, packet_queue: Arc<Mutex<AllocRingBuffer<Bl
                 "ack" => {
                     let sent_packet = packets
                         .iter_mut()
-                        .find(|p| p.index == packet.index)
+                        .find(|p| p.index == packet.index && p.state == PacketState::Sent)
                         .expect("Received an ack for a nonexistent message");
 
                     sent_packet.state = PacketState::Resolved;
                 }
                 _ => {
-                    panic!("Unexpected packet type: {}", packet.msg)
+                    panic!("Unexpected packet msg: {}", packet.msg)
                 }
             },
             None => {
-                let mut index = match packets.to_vec().last() {
+                let packets_vec = packets.to_vec();
+                let last_packet = packets_vec
+                    .iter()
+                    .filter(|p| p.state != PacketState::Queued)
+                    .last();
+                let mut index = match last_packet {
                     Some(p) => p.index.unwrap_or(0),
                     None => 0,
                 };
@@ -59,8 +64,8 @@ pub async fn initialize(port: String, packet_queue: Arc<Mutex<AllocRingBuffer<Bl
                     .collect();
 
                 for packet in to_send.iter_mut() {
-                    packet.index = Some(index);
                     index = (index + 1) % 9;
+                    packet.index = Some(index);
                     comms.send(*packet).await.expect("Failed to send message");
                     packet.state = PacketState::Sent;
                 }
