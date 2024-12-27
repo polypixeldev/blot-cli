@@ -38,11 +38,20 @@ use uuid::Uuid;
 #[derive(Serialize, Deserialize)]
 struct BlotConfig {
     port: Option<String>,
+    interactive: InteractiveConfig,
+}
+
+#[derive(Serialize, Deserialize)]
+struct InteractiveConfig {
+    step: f32,
 }
 
 impl ::std::default::Default for BlotConfig {
     fn default() -> Self {
-        Self { port: None }
+        Self {
+            port: None,
+            interactive: InteractiveConfig { step: 5_f32 },
+        }
     }
 }
 
@@ -208,11 +217,14 @@ async fn main() {
                         match ans {
                             Ok(save) => {
                                 if save {
+                                    let current_cfg: BlotConfig =
+                                        confy::load("blot-cli", "blot").unwrap_or_default();
                                     let save_result = confy::store(
                                         "blot-cli",
                                         "blot",
                                         BlotConfig {
                                             port: Some(choice.clone()),
+                                            interactive: current_cfg.interactive,
                                         },
                                     );
 
@@ -354,7 +366,9 @@ async fn main() {
             let mut interactive_edit_status = InteractiveEditStatus::None;
 
             let mut edit_text = "".to_string();
-            let mut step_size = 5_f32;
+
+            let current_cfg: BlotConfig = confy::load("blot-cli", "blot").unwrap_or_default();
+            let mut step_size = current_cfg.interactive.step;
 
             let mut pending_futures: Vec<Pin<Box<dyn Future<Output = BlotPacket>>>> = vec![];
 
@@ -602,6 +616,19 @@ async fn main() {
                                             }
 
                                             step_size = new_step_size;
+
+                                            let current_cfg: BlotConfig =
+                                                confy::load("blot-cli", "blot").unwrap_or_default();
+                                            let _ = confy::store(
+                                                "blot-cli",
+                                                "blot",
+                                                BlotConfig {
+                                                    port: current_cfg.port,
+                                                    interactive: InteractiveConfig {
+                                                        step: step_size,
+                                                    },
+                                                },
+                                            );
                                         }
                                         _ => {}
                                     }
