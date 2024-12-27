@@ -8,6 +8,7 @@ clap = { version = "4.5.23", features = ["derive"] }
 cobs2 = "0.1.4"
 crossterm = "0.28.1"
 futures = "0.3.31"
+inquire = "0.7.5"
 ringbuffer = { version = "0.15.0", features = ["alloc"] }
 serialport = "4.6.1"
 tokio = { version = "1.42.0", features = ["full"] }

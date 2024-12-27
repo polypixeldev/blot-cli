@@ -8,7 +8,9 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
 use futures::{task::noop_waker_ref, FutureExt};
+use inquire::{self, Select};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
+use serialport::{self, SerialPortType};
 use std::{
     future::Future,
     io::{self, Stdout},
@@ -39,7 +41,7 @@ struct Cli {
     command: Commands,
 
     #[arg(short, long)]
-    port: String,
+    port: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -141,9 +143,38 @@ enum InteractiveEditStatus {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    let port = match cli.port {
+        Some(p) => p,
+        None => {
+            let ports = serialport::available_ports().unwrap_or(vec![]);
+
+            if ports.len() == 0 {
+                println!("No ports available on system. Make sure the Blot is powered and plugged in via USB.");
+                process::exit(1);
+            }
+
+            let options = ports
+                .iter()
+                .filter_map(|p| match p.port_type {
+                    SerialPortType::UsbPort(_) => Some(p.port_name.clone()),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            let ans = Select::new("Choose a serial port", options).prompt();
+
+            match ans {
+                Ok(choice) => choice,
+                Err(_) => {
+                    println!("Could not determine port to use");
+                    process::exit(1);
+                }
+            }
+        }
+    };
 
     let packet_queue = Arc::new(Mutex::new(AllocRingBuffer::new(10)));
-    let comms_thread = tokio::spawn(comms::initialize(cli.port, packet_queue.clone()));
+    let comms_thread = tokio::spawn(comms::initialize(port, packet_queue.clone()));
 
     // Exit main thread if comms thread panics
     let orig_hook = panic::take_hook();
