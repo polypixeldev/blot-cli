@@ -2,14 +2,16 @@ mod comms;
 
 use clap::{Parser, Subcommand};
 use comms::{BlotPacket, PacketState};
+use confy;
 use crossterm::{
     event::{self, DisableMouseCapture, Event as CEvent, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
 use futures::{task::noop_waker_ref, FutureExt};
-use inquire::{self, Select};
+use inquire::{self, Confirm, Select};
 use ringbuffer::{AllocRingBuffer, RingBuffer};
+use serde::{Deserialize, Serialize};
 use serialport::{self, SerialPortType};
 use std::{
     future::Future,
@@ -32,6 +34,17 @@ use tui::{
     Terminal,
 };
 use uuid::Uuid;
+
+#[derive(Serialize, Deserialize)]
+struct BlotConfig {
+    port: Option<String>,
+}
+
+impl ::std::default::Default for BlotConfig {
+    fn default() -> Self {
+        Self { port: None }
+    }
+}
 
 /// CLI for the Hack Club Blot
 #[derive(Parser)]
@@ -143,39 +156,86 @@ enum InteractiveEditStatus {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
-    let port = match cli.port {
+    let cfg: Result<BlotConfig, confy::ConfyError> = confy::load("blot-cli", "blot");
+    let cfg_port = match cfg {
+        Ok(config) => config.port,
+        Err(_) => None,
+    };
+    let port = match cfg_port {
         Some(p) => p,
-        None => {
-            let ports = serialport::available_ports().unwrap_or(vec![]);
+        None => match cli.port {
+            Some(p) => p,
+            None => {
+                let ports = serialport::available_ports().unwrap_or(vec![]);
 
-            let filtered = ports
-                .iter()
-                .filter(|p| match p.port_type {
-                    SerialPortType::UsbPort(_) => true,
-                    _ => false,
-                })
-                .collect::<Vec<_>>();
+                let filtered = ports
+                    .iter()
+                    .filter(|p| match p.port_type {
+                        SerialPortType::UsbPort(_) => true,
+                        _ => false,
+                    })
+                    .collect::<Vec<_>>();
 
-            if filtered.len() == 0 {
-                println!("No USB serial ports available on system. Make sure the Blot is powered on and plugged in via USB.");
-                process::exit(1);
-            }
-
-            let options = filtered
-                .iter()
-                .map(|p| p.port_name.clone())
-                .collect::<Vec<_>>();
-
-            let ans = Select::new("Choose a serial port", options).prompt();
-
-            match ans {
-                Ok(choice) => choice,
-                Err(_) => {
-                    println!("Could not determine port to use");
+                if filtered.len() == 0 {
+                    println!("No USB serial ports available on system. Make sure the Blot is powered on and plugged in via USB.");
                     process::exit(1);
                 }
+
+                let options = filtered
+                    .iter()
+                    .map(|p| p.port_name.clone())
+                    .collect::<Vec<_>>();
+
+                let ans = Select::new("Choose a serial port", options).prompt();
+
+                match ans {
+                    Ok(choice) => {
+                        let path = confy::get_configuration_file_path("blot-cli", "blot");
+                        let config_path = match path {
+                            Ok(p) => {
+                                let path_str = p.clone();
+                                path_str.to_str().unwrap_or("the config file").to_string()
+                            }
+                            Err(_) => "the config file".to_string(),
+                        };
+
+                        let ans = Confirm::new(&format!(
+                            "Would you like to save this port in {config_path}?"
+                        ))
+                        .with_default(true)
+                        .prompt();
+
+                        match ans {
+                            Ok(save) => {
+                                if save {
+                                    let save_result = confy::store(
+                                        "blot-cli",
+                                        "blot",
+                                        BlotConfig {
+                                            port: Some(choice.clone()),
+                                        },
+                                    );
+
+                                    if save_result.is_err() {
+                                        println!(
+                                            "Unable to save config: {}",
+                                            save_result.unwrap_err()
+                                        );
+                                    }
+                                };
+                            }
+                            Err(_) => (),
+                        }
+
+                        choice
+                    }
+                    Err(_) => {
+                        println!("Could not determine port to use");
+                        process::exit(1);
+                    }
+                }
             }
-        }
+        },
     };
 
     let packet_queue = Arc::new(Mutex::new(AllocRingBuffer::new(10)));

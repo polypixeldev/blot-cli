@@ -6,10 +6,12 @@ edition = "2021"
 [dependencies]
 clap = { version = "4.5.23", features = ["derive"] }
 cobs2 = "0.1.4"
+confy = "0.6.1"
 crossterm = "0.28.1"
 futures = "0.3.31"
 inquire = "0.7.5"
 ringbuffer = { version = "0.15.0", features = ["alloc"] }
+serde = { version = "1.0.217", features = ["derive"] }
 serialport = "4.6.1"
 tokio = { version = "1.42.0", features = ["full"] }
 tui = "0.19.0"
