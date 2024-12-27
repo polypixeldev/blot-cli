@@ -2,6 +2,12 @@
 name = "blot-cli"
 version = "1.0.0"
 edition = "2021"
+license = "MIT"
+description = "CLI for the Hack Club Blot"
+repository = "https://github.com/polypixeldev/blot-cli"
+readme = "README.md"
+keywords = ["hackclub", "blot", "cli"]
+categories = ["command-line-utilities", "science::robotics"]
 
 [dependencies]
 clap = { version = "4.5.23", features = ["derive"] }
