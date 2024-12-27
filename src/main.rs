@@ -148,17 +148,22 @@ async fn main() {
         None => {
             let ports = serialport::available_ports().unwrap_or(vec![]);
 
-            if ports.len() == 0 {
-                println!("No ports available on system. Make sure the Blot is powered and plugged in via USB.");
+            let filtered = ports
+                .iter()
+                .filter(|p| match p.port_type {
+                    SerialPortType::UsbPort(_) => true,
+                    _ => false,
+                })
+                .collect::<Vec<_>>();
+
+            if filtered.len() == 0 {
+                println!("No USB serial ports available on system. Make sure the Blot is powered on and plugged in via USB.");
                 process::exit(1);
             }
 
-            let options = ports
+            let options = filtered
                 .iter()
-                .filter_map(|p| match p.port_type {
-                    SerialPortType::UsbPort(_) => Some(p.port_name.clone()),
-                    _ => None,
-                })
+                .map(|p| p.port_name.clone())
                 .collect::<Vec<_>>();
 
             let ans = Select::new("Choose a serial port", options).prompt();
