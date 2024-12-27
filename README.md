@@ -1,9 +1,9 @@
 # Blot CLI
 **CLI for the [Hack Club Blot](https://blot.hackclub.com/)**
 
-Install it from the [latest release](https://github.com/polypixeldev/blot-cli/releases) or from [crates.io](https://crates.io/crates/hackclub-blot):
+Install it from the [latest release](https://github.com/polypixeldev/blot-cli/releases) or from [crates.io](https://crates.io/crates/blot-cli):
 ```sh
-cargo install hackclub-blot
+cargo install blot-cli
 ```
 
 **Demo:** https://asciinema.org/a/696324
